@@ -1,15 +1,1 @@
-name: dwh-deployment-helper
-description: Data Warehouse Table Deployment Helper based on ST and HS Framework
-
-app:
-  framework: streamlit
-  entrypoint: app.py
-  sources:
-    - app.py
-    - requirements.txt
-
-runtime:
-  python: 3.9
-  requirements:
-    - streamlit==1.32.0
-    - pandas==2.0.3 
+command: ['streamlit', 'run', 'app.py']
