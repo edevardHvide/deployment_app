@@ -32,7 +32,7 @@ with st.sidebar:
         "Replicate_Full", 
         "Replicate_CDC", 
         "INS_temporal",
-        "RIA",
+        "TIA",
         "Profisee",
         "Replicate_CDC_AllTransactions",
         "Replicate_CDC_AllTransactions_fromArchive"
@@ -115,6 +115,15 @@ with st.sidebar:
     else:
         scd2_columns = "__allColumns"
     
+    # Add create helper table checkbox
+    create_helper_table = st.checkbox("Create helper table", 
+                                     help="Creates a helper table with business key mapping")
+    
+    if create_helper_table:
+        helper_schema = st.text_input("Helper Table Schema", "DF")
+        business_key_column = st.text_input("Business Key Column Name", 
+                                           help="The main business key column to include in the helper table")
+    
     # Delete Configuration
     st.subheader("Delete Configuration")
     
@@ -150,10 +159,27 @@ with st.sidebar:
         if scd_type == "SCD2 from CT":
             source_column_for_sorting = st.text_input("Source Column for Sorting", "header__change_seq", help="Column for sorting incoming changes")
     
+    # Main Table Creation
+    st.subheader("Main Table Creation")
+    create_main_table = st.checkbox("Create main DIM table", help="Creates the main dimension table in DIM schema")
+    
+    if create_main_table:
+        main_table_schema = st.text_input("Main Table Schema", "DIM")
+        main_table_prefix = st.text_input("Main Table Prefix", "DIM_")
+        
+        # Sample columns for the main table
+        st.text("Enter placeholder for domain-specific columns:")
+        main_table_columns = st.text_area("Table Columns (column name, data type)", 
+                                         """PARTY_ID bigint NULL,
+RECORD_VERSION int NULL,
+...... nvarchar(255) NULL""", 
+                                         help="Format: COLUMN_NAME DATA_TYPE NULL/NOT NULL, one per line. Use ...... as placeholder for additional columns.")
+    
     # Skip Options
     st.subheader("Skip Options")
     skip_st_table = st.checkbox("ST Table Already Exists")
     skip_hs_table = st.checkbox("HS Table Already Exists")
+    skip_main_table = st.checkbox("Main Table Already Exists")
     
     # Generate SQL button in sidebar
     if st.button("Generate SQL Script", type="primary"):
@@ -172,13 +198,15 @@ with st.sidebar:
 # Main content area with tabs
 st.header("Generated SQL Deployment Script")
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "1. Control Tables Backup", 
     "2. ST Control Table", 
     "3. HS Control Table", 
     "4. Job Control Table",
     "5. Create HS Table",
-    "6. Cleanup"
+    "6. Cleanup",
+    "7. Helper Table",
+    "8. Main Table"
 ])
 
 if st.session_state.sql_generated:
@@ -434,7 +462,118 @@ DROP TABLE sandbox.CONTROL_TABLE_STAGE_backup_{table_suffix};
         tab6_sql = cleanup_stage_sql + "\n" + cleanup_hs_sql + "\n" + cleanup_temp_sql
         st.code(tab6_sql)
         
+    # Tab 7: Helper Table Creation
+    with tab7:
+        st.subheader("Step 7: Create Helper Table")
+        
+        if create_helper_table and business_key_column:
+            # Extract the table name without prefix for helper table naming
+            base_table_name = src_table_name
+            if "_" in src_table_name:
+                base_table_name = src_table_name.split("_", 1)[1] if src_table_name.count("_") > 0 else src_table_name
+            
+            helper_table_name = f"HLP_BK_{base_table_name}"
+            identity_column_name = f"BK_{base_table_name}"
+            
+            helper_table_sql = f"""SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [{helper_schema}].[{helper_table_name}](
+    [{identity_column_name}] [int] IDENTITY(1,1) NOT NULL,
+    [{business_key_column}] [bigint] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+    [{identity_column_name}] ASC
+)WITH (STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+"""
+            st.code(helper_table_sql)
+        else:
+            st.info("Helper table creation was not selected. Check the 'Create helper table' option in the SCD Configuration section to generate the helper table SQL.")
+    
+    # Tab 8: Main Table Creation
+    with tab8:
+        st.subheader("Step 8: Create Main Table")
+        
+        if create_main_table and not skip_main_table:
+            # Extract the base table name without prefix for main table naming
+            base_table_name = src_table_name
+            if "_" in src_table_name:
+                base_table_name = src_table_name.split("_", 1)[1] if src_table_name.count("_") > 0 else src_table_name
+            
+            # Prepare table name, with user-specified prefix if provided
+            if main_table_prefix:
+                main_table_name = f"{main_table_prefix}{base_table_name}"
+            else:
+                main_table_name = f"DIM_{base_table_name}"
+            
+            # Primary key and business key column names
+            pk_column_name = f"PK_{main_table_name}"
+            bk_column_name = f"BK_{base_table_name}"
+            
+            # Process the user's column definitions
+            column_defs = []
+            for line in main_table_columns.strip().split('\n'):
+                if line.strip():
+                    column_defs.append(f"\t{line.strip()}")
+            
+            # Generate main table SQL
+            main_table_sql = f"""SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [{main_table_schema}].[{main_table_name}](
+\t[{pk_column_name}] [int] IDENTITY(1,1) NOT NULL,
+\t[{bk_column_name}] [int] NULL,
+{chr(10).join(column_defs)},
+\t[TC_CURRENT_FLAG] [varchar](1) NULL,
+\t[TC_VALID_FROM_DATE] [datetime2](0) NULL,
+\t[TC_VALID_TO_DATE] [datetime2](0) NULL,
+\t[TC_CHECKSUM_SCD] [varchar](32) NULL,
+\t[TC_CHECKSUM_BUSKEY] [varchar](32) NULL,
+\t[TC_DELETED_FLAG] [varchar](1) NULL,
+\t[TC_DELETED_DATETIME] [datetime2](0) NULL,
+\t[TC_SOURCE_SYSTEM] [varchar](10) NULL,
+\t[TC_UPDATED_DATE] [datetime2](0) NULL,
+\t[TC_ROW_ID] [int] NULL,
+PRIMARY KEY CLUSTERED 
+(
+\t[{pk_column_name}] ASC
+)WITH (STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+"""
+            st.code(main_table_sql)
+        else:
+            if skip_main_table:
+                st.info("Main table creation skipped as per user selection.")
+            else:
+                st.info("Main table creation was not selected. Check the 'Create main DIM table' option to generate the main table SQL.")
+    
     # Prepare complete SQL script for download
+    # Add the helper table and main table SQL to the complete script if they were selected
+    helper_table_section = ""
+    if create_helper_table and business_key_column:
+        helper_table_section = f"""
+---------------------------------------------------------
+-- STEP 7: CREATE HELPER TABLE
+---------------------------------------------------------
+{helper_table_sql}
+"""
+
+    main_table_section = ""
+    if create_main_table and not skip_main_table:
+        main_table_section = f"""
+---------------------------------------------------------
+-- STEP 8: CREATE MAIN TABLE
+---------------------------------------------------------
+{main_table_sql}
+"""
+
     complete_sql = f"""-- Generated SQL Deployment Script for {src_table_name}
 -- Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 -- This script contains all steps needed for deploying {src_table_name} to the data warehouse.
@@ -468,8 +607,7 @@ DROP TABLE sandbox.CONTROL_TABLE_STAGE_backup_{table_suffix};
 ---------------------------------------------------------
 -- STEP 6: CLEANUP - ADD TO PRODUCTION CONTROL TABLES
 ---------------------------------------------------------
-{tab6_sql}
-
+{tab6_sql}{helper_table_section}{main_table_section}
 -- End of script
 """
     
