@@ -42,14 +42,38 @@ with st.sidebar:
         "Source System (Initial)", 
         source_system_options,
         index=0, 
-        help="INS_temporal: INS Tables with system version control\nRIA: Reinsurance application\nReplicate_Full: Initial load tables\nReplicate_CDC: CDC tables (latest change per business key)\nProfisee: Profisee production database\nReplicate_CDC_AllTransactions: All transactions from CT table\nReplicate_CDC_AllTransactions_fromArchive: Read from view combining archives"
+        help="INS_temporal: INS Tables with system version control\nTIA: Reinsurance application\nReplicate_Full: Initial load tables\nReplicate_CDC: CDC tables (latest change per business key)\nProfisee: Profisee production database\nReplicate_CDC_AllTransactions: All transactions from CT table\nReplicate_CDC_AllTransactions_fromArchive: Read from view combining archives"
     )
+    
+    # Add environment selection for Profisee source system
+    profisee_environment_initial = None
+    if source_system_initial == "Profisee":
+        profisee_environment_initial = st.selectbox(
+            "Profisee Environment (Initial)",
+            ["prod", "dev", "test"],
+            help="prod: Production (no suffix)\ndev: Development (adds _dev suffix)\ntest: Test environment (adds _test suffix)"
+        )
+        # Apply the suffix to the source system name if not prod
+        if profisee_environment_initial != "prod":
+            source_system_initial = f"Profisee_{profisee_environment_initial}"
     
     source_system_daily = st.selectbox(
         "Source System (Daily)", 
         source_system_options,
         index=1
     )
+    
+    # Add environment selection for Profisee source system (daily)
+    profisee_environment_daily = None
+    if source_system_daily == "Profisee":
+        profisee_environment_daily = st.selectbox(
+            "Profisee Environment (Daily)",
+            ["prod", "dev", "test"],
+            help="prod: Production (no suffix)\ndev: Development (adds _dev suffix)\ntest: Test environment (adds _test suffix)"
+        )
+        # Apply the suffix to the source system name if not prod
+        if profisee_environment_daily != "prod":
+            source_system_daily = f"Profisee_{profisee_environment_daily}"
     
     src_schema_name = st.text_input("Source Schema Name", "TIA")
     src_table_name = st.text_input("Source Table Name")
@@ -115,6 +139,22 @@ with st.sidebar:
     else:
         scd2_columns = "__allColumns"
     
+    # Main Table Creation
+    st.subheader("Dimension and Helper Tables")
+    create_main_table = st.checkbox("Create main DIM table", help="Creates the main dimension table in DIM schema")
+    
+    if create_main_table:
+        main_table_schema = st.text_input("Main Table Schema", "DIM")
+        main_table_prefix = st.text_input("Main Table Prefix", "DIM_")
+        
+        # Sample columns for the main table
+        st.text("Enter placeholder for domain-specific columns:")
+        main_table_columns = st.text_area("Table Columns (column name, data type)", 
+                                         """PARTY_ID bigint NULL,
+RECORD_VERSION int NULL,
+...... nvarchar(255) NULL""", 
+                                         help="Format: COLUMN_NAME DATA_TYPE NULL/NOT NULL, one per line. Use ...... as placeholder for additional columns.")
+    
     # Add create helper table checkbox
     create_helper_table = st.checkbox("Create helper table", 
                                      help="Creates a helper table with business key mapping")
@@ -159,22 +199,6 @@ with st.sidebar:
         if scd_type == "SCD2 from CT":
             source_column_for_sorting = st.text_input("Source Column for Sorting", "header__change_seq", help="Column for sorting incoming changes")
     
-    # Main Table Creation
-    st.subheader("Main Table Creation")
-    create_main_table = st.checkbox("Create main DIM table", help="Creates the main dimension table in DIM schema")
-    
-    if create_main_table:
-        main_table_schema = st.text_input("Main Table Schema", "DIM")
-        main_table_prefix = st.text_input("Main Table Prefix", "DIM_")
-        
-        # Sample columns for the main table
-        st.text("Enter placeholder for domain-specific columns:")
-        main_table_columns = st.text_area("Table Columns (column name, data type)", 
-                                         """PARTY_ID bigint NULL,
-RECORD_VERSION int NULL,
-...... nvarchar(255) NULL""", 
-                                         help="Format: COLUMN_NAME DATA_TYPE NULL/NOT NULL, one per line. Use ...... as placeholder for additional columns.")
-    
     # Skip Options
     st.subheader("Skip Options")
     skip_st_table = st.checkbox("ST Table Already Exists")
@@ -205,8 +229,8 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "4. Job Control Table",
     "5. Create HS Table",
     "6. Cleanup",
-    "7. Helper Table",
-    "8. Main Table"
+    "7. Dimension and Helper Tables",
+    "8. ADF Pipeline JSON"
 ])
 
 if st.session_state.sql_generated:
@@ -462,10 +486,11 @@ DROP TABLE sandbox.CONTROL_TABLE_STAGE_backup_{table_suffix};
         tab6_sql = cleanup_stage_sql + "\n" + cleanup_hs_sql + "\n" + cleanup_temp_sql
         st.code(tab6_sql)
         
-    # Tab 7: Helper Table Creation
+    # Tab 7: Dimension and Helper Tables
     with tab7:
-        st.subheader("Step 7: Create Helper Table")
+        st.subheader("Step 7: Create Dimension and Helper Tables")
         
+        # Helper Table Creation
         if create_helper_table and business_key_column:
             # Extract the table name without prefix for helper table naming
             base_table_name = src_table_name
@@ -493,12 +518,9 @@ GO
 """
             st.code(helper_table_sql)
         else:
-            st.info("Helper table creation was not selected. Check the 'Create helper table' option in the SCD Configuration section to generate the helper table SQL.")
-    
-    # Tab 8: Main Table Creation
-    with tab8:
-        st.subheader("Step 8: Create Main Table")
+            st.info("Helper table creation was not selected. Check the 'Create helper table' option in the Dimension and Helper Tables section to generate the helper table SQL.")
         
+        # Main Table Creation
         if create_main_table and not skip_main_table:
             # Extract the base table name without prefix for main table naming
             base_table_name = src_table_name
@@ -553,6 +575,260 @@ GO
                 st.info("Main table creation skipped as per user selection.")
             else:
                 st.info("Main table creation was not selected. Check the 'Create main DIM table' option to generate the main table SQL.")
+    
+    # Tab 8: ADF Pipeline JSON
+    with tab8:
+        st.subheader("Step 8: ADF Pipeline JSON")
+        
+        # Generate the ADF pipeline JSON for both initial and daily loads
+        adf_pipeline_name_initial = f"pl_StageAndHistoricStageInitialLoad_{src_table_name}"
+        adf_pipeline_name_daily = f"pl_StageAndHistoricStageDailyLoad_{src_table_name}"
+        
+        # Create initial load JSON
+        adf_json_initial = {
+            "name": adf_pipeline_name_initial,
+            "properties": {
+                "activities": [
+                    {
+                        "name": "Initial Stage and HS",
+                        "type": "ExecutePipeline",
+                        "dependsOn": [],
+                        "policy": {
+                            "secureInput": False
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "pipeline": {
+                                "referenceName": "pl_framework_StageAndHSLoop",
+                                "type": "PipelineReference"
+                            },
+                            "waitOnCompletion": True,
+                            "parameters": {
+                                "pStopDate": {
+                                    "value": "@formatDateTime(addDays(utcNow(),1),'yyyy-MM-dd HH:mm:ss')",
+                                    "type": "Expression"
+                                },
+                                "pSTJob": "ST_Full_Initial",
+                                "pHSJob": "HS_Full_Initial",
+                                "pJobControlSchema": "sandbox",
+                                "pJobControlTable": f"temp_control_table_job_{table_suffix}",
+                                "pSTTablesControlSchema": "sandbox",
+                                "pSTTablesControlTable": f"temp_control_table_st_{table_suffix}",
+                                "pHSTablesControlSchema": "sandbox",
+                                "pHSTablesControlTable": f"temp_control_table_hs_{table_suffix}",
+                                "pLoopJob": "HS_Full_Initial_Control",
+                                "pLogSchema": "DWH",
+                                "pLogTableJobLevel": "JOB_LOG",
+                                "pLogTableTableLevel": "JOB_TABLES_LOG",
+                                "pIntialLoad": True
+                            }
+                        }
+                    }
+                ],
+                "folder": {
+                    "name": "Deployment and initial load"
+                },
+                "annotations": []
+            }
+        }
+        
+        # Create daily load JSON
+        adf_json_daily = {
+            "name": adf_pipeline_name_daily,
+            "properties": {
+                "activities": [
+                    {
+                        "name": "Daily Stage and HS",
+                        "type": "ExecutePipeline",
+                        "dependsOn": [],
+                        "policy": {
+                            "secureInput": False
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "pipeline": {
+                                "referenceName": "pl_framework_StageAndHSLoop",
+                                "type": "PipelineReference"
+                            },
+                            "waitOnCompletion": True,
+                            "parameters": {
+                                "pStopDate": {
+                                    "value": "@formatDateTime(addDays(utcNow(),1),'yyyy-MM-dd HH:mm:ss')",
+                                    "type": "Expression"
+                                },
+                                "pSTJob": "ST_Full_Daily",
+                                "pHSJob": "HS_Full_Daily",
+                                "pJobControlSchema": "sandbox",
+                                "pJobControlTable": f"temp_control_table_job_{table_suffix}",
+                                "pSTTablesControlSchema": "sandbox",
+                                "pSTTablesControlTable": f"temp_control_table_st_{table_suffix}",
+                                "pHSTablesControlSchema": "sandbox",
+                                "pHSTablesControlTable": f"temp_control_table_hs_{table_suffix}",
+                                "pLoopJob": "HS_Full_Daily_Control",
+                                "pLogSchema": "DWH",
+                                "pLogTableJobLevel": "JOB_LOG",
+                                "pLogTableTableLevel": "JOB_TABLES_LOG",
+                                "pIntialLoad": False
+                            }
+                        }
+                    },
+                    {
+                        "name": "Stage Deletes",
+                        "type": "ExecutePipeline",
+                        "state": "Inactive",
+                        "onInactiveMarkAs": "Succeeded",
+                        "dependsOn": [
+                            {
+                                "activity": "Daily Stage and HS",
+                                "dependencyConditions": [
+                                    "Succeeded"
+                                ]
+                            }
+                        ],
+                        "policy": {
+                            "secureInput": False
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "pipeline": {
+                                "referenceName": "pl_framework_StageDeleteLoop",
+                                "type": "PipelineReference"
+                            },
+                            "waitOnCompletion": True,
+                            "parameters": {
+                                "pJobName": "ST_Full_Daily",
+                                "pDataControlTable": "CONTROL_TABLE_STAGE",
+                                "pDataControlSchema": "DWH"
+                            }
+                        }
+                    },
+                    {
+                        "name": "Update Delete flags",
+                        "type": "ExecutePipeline",
+                        "state": "Inactive",
+                        "onInactiveMarkAs": "Succeeded",
+                        "dependsOn": [
+                            {
+                                "activity": "Stage Deletes",
+                                "dependencyConditions": [
+                                    "Succeeded"
+                                ]
+                            }
+                        ],
+                        "policy": {
+                            "secureInput": False
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "pipeline": {
+                                "referenceName": "pl_framework_UpdateDeleteFlag",
+                                "type": "PipelineReference"
+                            },
+                            "waitOnCompletion": True,
+                            "parameters": {
+                                "pJobName": "HS_Full_Daily",
+                                "pDataControlTable": "CONTROL_TABLE_HS",
+                                "pDataControlSchema": "DWH",
+                                "pStageControlTable": "CONTROL_TABLE_STAGE",
+                                "pStageControlSchema": "DWH",
+                                "pStageJobName": "ST_Full_Daily"
+                            }
+                        }
+                    },
+                    {
+                        "name": "BK_preload",
+                        "type": "ExecutePipeline",
+                        "state": "Inactive",
+                        "onInactiveMarkAs": "Succeeded",
+                        "dependsOn": [
+                            {
+                                "activity": "Update Delete flags",
+                                "dependencyConditions": [
+                                    "Succeeded"
+                                ]
+                            }
+                        ],
+                        "policy": {
+                            "secureInput": False
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "pipeline": {
+                                "referenceName": "pl_BKPreload_Test",
+                                "type": "PipelineReference"
+                            },
+                            "waitOnCompletion": True
+                        }
+                    }
+                ],
+                "folder": {
+                    "name": "Scheduling"
+                },
+                "annotations": []
+            }
+        }
+        
+        # Convert the Python dictionaries to formatted JSON strings
+        import json
+        adf_json_str_initial = json.dumps(adf_json_initial, indent=4)
+        adf_json_str_daily = json.dumps(adf_json_daily, indent=4)
+        
+        # Create tabs for initial and daily load JSONs
+        initial_tab, daily_tab = st.tabs(["Initial Load Pipeline", "Daily Load Pipeline"])
+        
+        with initial_tab:
+            st.markdown("### Initial Load Pipeline")
+            st.code(adf_json_str_initial, language="json")
+            st.download_button(
+                label="Download Initial Load Pipeline JSON",
+                data=adf_json_str_initial,
+                file_name=f"{adf_pipeline_name_initial}.json",
+                mime="application/json",
+                key="download_adf_json_initial",
+            )
+        
+        with daily_tab:
+            st.markdown("### Daily Load Pipeline")
+            st.code(adf_json_str_daily, language="json")
+            st.download_button(
+                label="Download Daily Load Pipeline JSON",
+                data=adf_json_str_daily,
+                file_name=f"{adf_pipeline_name_daily}.json",
+                mime="application/json",
+                key="download_adf_json_daily",
+            )
+        
+        # Add instructions for pasting into ADF
+        st.markdown("""
+        ### Instructions for Pasting into ADF
+        
+        1. Open Azure Data Factory dev
+        2. For Initial Load:
+           - Navigate to the "Deployment and initial load" folder
+           - Create a new pipeline
+           - Rename it to match the initial load pipeline name
+           - Click the "Code" button in the top right corner
+           - Delete all existing code in the editor
+           - Paste the Initial Load JSON code
+           - Click "Apply"
+           - Save the pipeline
+        
+        3. For Daily Load:
+           - Navigate to the "Scheduling" folder
+           - Create a new pipeline
+           - Rename it to match the daily load pipeline name
+           - Click the "Code" button in the top right corner
+           - Delete all existing code in the editor
+           - Paste the Daily Load JSON code
+           - Click "Apply"
+           - Save the pipeline
+        
+        4. After successful initial load:
+           - Update the control tables to use the daily load job names
+           - The daily load pipeline will then use these updated names
+        
+        The pipelines will use the temporary control tables created in the previous steps.
+        """)
     
     # Prepare complete SQL script for download
     # Add the helper table and main table SQL to the complete script if they were selected
