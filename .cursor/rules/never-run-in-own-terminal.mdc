@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+When you try to run terminal commands in your chat terminal, you must activate .venv first, by .venv/Scripts/activate
