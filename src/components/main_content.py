@@ -60,7 +60,8 @@ def render_hs_control_table_tab(table_suffix):
         st.session_state.partitions,
         st.session_state.use_source_column_for_valid_dates,
         st.session_state.source_column_for_valid_from_date,
-        st.session_state.source_column_for_sorting
+        st.session_state.source_column_for_sorting,
+        st.session_state.source_system_initial
     )
     st.code(tab3_sql)
 
@@ -80,7 +81,9 @@ def render_hs_table_tab():
     tab5_sql = generate_hs_table_sql(
         st.session_state.tgt_schema_name_hs,
         st.session_state.tgt_table_name_hs,
-        st.session_state.skip_hs_table
+        st.session_state.skip_hs_table,
+        st.session_state.tgt_schema_name_st,
+        st.session_state.tgt_table_name_st
     )
     st.code(tab5_sql)
     
@@ -93,69 +96,40 @@ def render_adf_pipeline_tab():
     """Render the ADF pipeline JSON tab"""
     st.subheader("Step 6: ADF Pipeline JSON")
     
-    # Generate the ADF pipeline JSON for both initial and daily loads
+    # Generate the ADF pipeline JSON for initial load (the main one we'll use)
     adf_json_initial = generate_adf_pipeline_json(st.session_state.src_table_name, st.session_state.table_suffix, True)
-    adf_json_daily = generate_adf_pipeline_json(st.session_state.src_table_name, st.session_state.table_suffix, False)
     
-    # Convert the Python dictionaries to formatted JSON strings
+    # Convert the Python dictionary to a formatted JSON string
     adf_json_str_initial = json.dumps(adf_json_initial, indent=4)
-    adf_json_str_daily = json.dumps(adf_json_daily, indent=4)
     
-    # Create tabs for initial and daily load JSONs
-    initial_tab, daily_tab = st.tabs(["Initial Load Pipeline", "Daily Load Pipeline"])
+    # Display the JSON
+    st.markdown("### ADF Pipeline Configuration")
+    st.code(adf_json_str_initial, language="json")
     
-    with initial_tab:
-        st.markdown("### Initial Load Pipeline")
-        st.code(adf_json_str_initial, language="json")
-        st.download_button(
-            label="Download Initial Load Pipeline JSON",
-            data=adf_json_str_initial,
-            file_name=f"{adf_json_initial['name']}.json",
-            mime="application/json",
-            key="download_adf_json_initial",
-        )
-    
-    with daily_tab:
-        st.markdown("### Daily Load Pipeline")
-        st.code(adf_json_str_daily, language="json")
-        st.download_button(
-            label="Download Daily Load Pipeline JSON",
-            data=adf_json_str_daily,
-            file_name=f"{adf_json_daily['name']}.json",
-            mime="application/json",
-            key="download_adf_json_daily",
-        )
+    # Download button
+    st.download_button(
+        label="Download ADF Pipeline JSON",
+        data=adf_json_str_initial,
+        file_name=f"{adf_json_initial['name']}.json",
+        mime="application/json",
+        key="download_adf_json",
+    )
     
     # Add instructions for pasting into ADF
     st.markdown("""
     ### Instructions for Pasting into ADF
     
     1. Open Azure Data Factory dev
-    2. For Initial Load:
-       - Navigate to the "Deployment and initial load" folder
-       - Create a new pipeline
-       - Rename it to match the initial load pipeline name
-       - Click the "Code" button in the top right corner
-       - Delete all existing code in the editor
-       - Paste the Initial Load JSON code
-       - Click "Apply"
-       - Save the pipeline
+    2. Navigate to the "Deployment and initial load" folder
+    3. Create a new pipeline
+    4. Rename it to match the pipeline name
+    5. Click the "Code" button in the top right corner
+    6. Delete all existing code in the editor
+    7. Paste the JSON code
+    8. Click "Apply"
+    9. Save the pipeline
     
-    3. For Daily Load:
-       - Navigate to the "Scheduling" folder
-       - Create a new pipeline
-       - Rename it to match the daily load pipeline name
-       - Click the "Code" button in the top right corner
-       - Delete all existing code in the editor
-       - Paste the Daily Load JSON code
-       - Click "Apply"
-       - Save the pipeline
-    
-    4. After successful initial load:
-       - Update the control tables to use the daily load job names
-       - The daily load pipeline will then use these updated names
-    
-    The pipelines will use the temporary control tables created in the previous steps.
+    The pipeline will use the temporary control tables created in the previous steps.
     """)
     
     st.markdown("""
@@ -286,7 +260,8 @@ def render_main_content():
     st.session_state.partitions,
     st.session_state.use_source_column_for_valid_dates,
     st.session_state.source_column_for_valid_from_date,
-    st.session_state.source_column_for_sorting
+    st.session_state.source_column_for_sorting,
+    st.session_state.source_system_initial
 )}
 
 ---------------------------------------------------------
@@ -300,7 +275,9 @@ def render_main_content():
 {generate_hs_table_sql(
     st.session_state.tgt_schema_name_hs,
     st.session_state.tgt_table_name_hs,
-    st.session_state.skip_hs_table
+    st.session_state.skip_hs_table,
+    st.session_state.tgt_schema_name_st,
+    st.session_state.tgt_table_name_st
 )}
 
 ---------------------------------------------------------

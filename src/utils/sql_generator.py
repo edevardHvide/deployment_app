@@ -31,10 +31,14 @@ def generate_st_control_table_sql(table_suffix, source_system_initial, source_sy
     src_delete_column_sql = "NULL" if src_delete_column is None else f"'{src_delete_column}'"
     src_delete_value_sql = "NULL" if src_delete_value is None else f"'{src_delete_value}'"
     
+    # Special job name for Profisee source
+    initial_job_name = "ST_profisee_initial" if "Profisee" in source_system_initial else "ST_Full_Initial"
+    daily_job_name = "ST_profisee_daily" if "Profisee" in source_system_daily else "ST_Full_Daily"
+    
     return f"""-- Update temporary control table for stage to reflect Initial Load values
 UPDATE sandbox.temp_control_table_st_{table_suffix}
 SET 
-    job_name = 'ST_Full_Initial',
+    job_name = '{initial_job_name}',
     source_system = '{source_system_initial}',
     src_schema_name = '{src_schema_name}',
     src_table_name = '{src_table_name}',
@@ -54,7 +58,7 @@ WHERE job_name = 'ST_Full_Initial';
 -- Update temporary control table for stage to reflect Daily load values
 UPDATE sandbox.temp_control_table_st_{table_suffix}
 SET 
-    job_name = 'ST_Full_Daily',
+    job_name = '{daily_job_name}',
     source_system = '{source_system_daily}',
     src_schema_name = '{src_schema_name}',
     src_table_name = '{src_table_name_ct}',
@@ -77,7 +81,7 @@ def generate_hs_control_table_sql(table_suffix, tgt_schema_name_st, tgt_table_na
                                 primary_key, incremental_filter_hs, incremental_filter_timezone,
                                 scd_type, scd2_columns, prescript, postscript, partitions,
                                 use_source_column_for_valid_dates, source_column_for_valid_from_date,
-                                source_column_for_sorting):
+                                source_column_for_sorting, source_system_initial=None):
     """Generate SQL for HS control table updates"""
     prescript_sql = "''" if not prescript else f"'{prescript}'"
     postscript_sql = "''" if not postscript else f"'{postscript}'"
@@ -89,9 +93,12 @@ def generate_hs_control_table_sql(table_suffix, tgt_schema_name_st, tgt_table_na
         sorting_column_clause = f"""
     source_column_for_sorting = '{source_column_for_sorting}',"""
     
+    # Special job name for Profisee source
+    job_name = "HS_Profisee_Daily" if source_system_initial and "Profisee" in source_system_initial else "HS_Full_Daily"
+    
     return f"""-- Update temporary control table for historic stage to reflect daily load values
 UPDATE sandbox.temp_control_table_hs_{table_suffix}
-SET job_name = 'HS_Full_Daily',
+SET job_name = '{job_name}',
     src_schema_name = '{tgt_schema_name_st}',
     src_table_name = '{tgt_table_name_st}', 
     tgt_schema_name = '{tgt_schema_name_hs}',
@@ -123,13 +130,17 @@ SET
 WHERE job_name IN ('HS_Full_Daily','ST_Full_Daily','HS_Full_Daily_Control','ST_Full_Initial');
 """
 
-def generate_hs_table_sql(tgt_schema_name_hs, tgt_table_name_hs, skip_hs_table):
+def generate_hs_table_sql(tgt_schema_name_hs, tgt_table_name_hs, skip_hs_table, tgt_schema_name_st=None, tgt_table_name_st=None):
     """Generate SQL for HS table creation"""
     if skip_hs_table:
         return f"-- HS Table creation skipped as per user selection"
     
+    if not tgt_schema_name_st or not tgt_table_name_st:
+        return f"""-- Error: Source table information is missing.
+-- Please provide the ST schema and table name to create the HS table correctly."""
+    
     return f"""-- Create the HS table with technical columns
-SELECT * INTO {tgt_schema_name_hs}.{tgt_table_name_hs} FROM {tgt_schema_name_hs}.{tgt_table_name_hs} WHERE 1 = 0;
+SELECT * INTO {tgt_schema_name_hs}.{tgt_table_name_hs} FROM {tgt_schema_name_st}.{tgt_table_name_st} WHERE 1 = 0;
 
 ALTER TABLE {tgt_schema_name_hs}.{tgt_table_name_hs}
 ADD TC_CURRENT_FLAG VARCHAR(1), 

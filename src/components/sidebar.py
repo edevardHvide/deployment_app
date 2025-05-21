@@ -88,35 +88,11 @@ def render_source_table_section(params):
         help="INS_temporal: INS Tables with system version control\nTIA: Reinsurance application\nReplicate_Full: Initial load tables\nReplicate_CDC: CDC tables (latest change per business key)\nProfisee: Profisee production database\nReplicate_CDC_AllTransactions: All transactions from CT table\nReplicate_CDC_AllTransactions_fromArchive: Read from view combining archives"
     )
     
-    # Add environment selection for Profisee source system
-    profisee_environment_initial = None
-    if source_system_initial == "Profisee":
-        profisee_environment_initial = st.selectbox(
-            "Profisee Environment (Initial)",
-            ["prod", "dev", "test"],
-            help="prod: Production (no suffix)\ndev: Development (adds _dev suffix)\ntest: Test environment (adds _test suffix)"
-        )
-        # Apply the suffix to the source system name if not prod
-        if profisee_environment_initial != "prod":
-            source_system_initial = f"Profisee_{profisee_environment_initial}"
-    
     source_system_daily = st.selectbox(
         "Source System (Daily)", 
         SOURCE_SYSTEM_OPTIONS,
         index=1
     )
-    
-    # Add environment selection for Profisee source system (daily)
-    profisee_environment_daily = None
-    if source_system_daily == "Profisee":
-        profisee_environment_daily = st.selectbox(
-            "Profisee Environment (Daily)",
-            ["prod", "dev", "test"],
-            help="prod: Production (no suffix)\ndev: Development (adds _dev suffix)\ntest: Test environment (adds _test suffix)"
-        )
-        # Apply the suffix to the source system name if not prod
-        if profisee_environment_daily != "prod":
-            source_system_daily = f"Profisee_{profisee_environment_daily}"
     
     src_schema_name = st.text_input("Source Schema Name", params.get("src_schema_name", DEFAULT_VALUES["src_schema_name"]))
     src_table_name = st.text_input("Source Table Name", params.get("src_table_name", ""))
@@ -139,7 +115,7 @@ def render_key_columns_section(params):
     """Render the key columns configuration section"""
     st.subheader("Key Columns Configuration")
     business_key = st.text_input("Business Key (comma-separated)", params.get("business_key", ""), help="List of columns that identify a unique row in the source")
-    primary_key = st.text_input("Primary Key", params.get("primary_key", DEFAULT_VALUES["primary_key"]), help="Name of the Primary key field in the target table. Usually an identity column")
+    primary_key = st.text_input("HS Table Primary Key", params.get("primary_key", DEFAULT_VALUES["primary_key"]), help="Name of the Primary key field in the HS table. Usually TC_ROW_ID identity column")
     
     return business_key, primary_key
 
