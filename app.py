@@ -8,7 +8,7 @@ from src.config.constants import DEFAULT_VALUES
 
 # Set page config
 st.set_page_config(
-    page_title="Data Warehouse Deployment App",
+    page_title="Skuld DWH Deployment App",
     page_icon="🏭",
     layout="wide",
     initial_sidebar_state="expanded",

@@ -1,5 +1,6 @@
 import streamlit as st
 from datetime import datetime
+import json
 from src.utils.parameters import export_parameters, import_parameters, get_current_params
 from src.config.constants import (
     SOURCE_SYSTEM_OPTIONS, DEFAULT_VALUES, SCD_TYPE_OPTIONS,
@@ -285,8 +286,6 @@ def render_skip_options(params):
 
 def render_sidebar():
     """Render the complete sidebar"""
-    st.header("Table Information")
-    
     # Check for imported parameters
     if 'imported_params' in st.session_state:
         params = st.session_state.imported_params
@@ -295,13 +294,17 @@ def render_sidebar():
     else:
         params = {}
     
-    # User Initials
+    # Render import/export section first
+    render_import_export_section()
+    
+    # Table Information header
+    st.header("Table Information")
+    
+    # User Initials below the header
     user_initials = st.text_input("Your Initials (e.g., skg)", params.get("user_initials", "")).lower()
     st.session_state.user_initials = user_initials
     
-    # Render all sections
-    render_import_export_section()
-    
+    # Render all other sections
     source_system_initial, source_system_daily, src_schema_name, src_table_name, src_table_name_ct = render_source_table_section(params)
     tgt_schema_name_st, tgt_table_name_st, tgt_schema_name_hs, tgt_table_name_hs = render_target_table_section(params, src_table_name)
     business_key, primary_key = render_key_columns_section(params)
