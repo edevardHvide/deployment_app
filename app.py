@@ -222,15 +222,14 @@ RECORD_VERSION int NULL,
 # Main content area with tabs
 st.header("Generated SQL Deployment Script")
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "1. Control Tables Backup", 
     "2. ST Control Table", 
     "3. HS Control Table", 
     "4. Job Control Table",
     "5. Create HS Table",
-    "6. Cleanup",
-    "7. Dimension and Helper Tables",
-    "8. ADF Pipeline JSON"
+    "6. ADF Pipeline JSON",
+    "7. Dimension and Helper Tables"
 ])
 
 if st.session_state.sql_generated:
@@ -381,18 +380,7 @@ WHERE job_name IN ('HS_Full_Daily','ST_Full_Daily','HS_Full_Daily_Control','ST_F
         st.code(tab4_sql)
         
         st.markdown("""
-        ### Pipeline Setup Notes
-        
-        1. Clone pipeline **Scheduling / pl_StageAndHistoricStageDailyLoad** in a separate branch
-        2. Add parameters to match your temporary tables
-        3. For initial load:
-           - Set STJobName to **ST_Full_Initial**
-           - Set HSJobName to **HS_Full_Daily**
-           - Set pInitialLoad to **true**
-        4. For daily loads:
-           - Set STJobName to **ST_Full_Daily**
-           - Set HSJobName to **HS_Full_Daily**
-           - Set pInitialLoad to **false**
+        In the next step, we will create the ADF pipeline JSON that will use these control table configurations to orchestrate the data loading process.
         """)
     
     # Tab 5: Create HS Tables
@@ -429,156 +417,9 @@ DROP COLUMN TC_INITIAL_LOAD_VALID_FROM_DATE;
         This will only run the stage part of the job and then fail. Then create the HS table with this script.
         """)
     
-    # Tab 6: Cleanup steps
+    # Tab 6: ADF Pipeline JSON
     with tab6:
-        st.subheader("Step 6: Cleanup - Add to Production Control Tables")
-        
-        cleanup_stage_sql = f"""-- Add the stage job definition to DWH.CONTROL_TABLE_STAGE
--- Backup control table first
-SELECT * INTO sandbox.CONTROL_TABLE_STAGE_backup_{table_suffix} FROM DWH.CONTROL_TABLE_STAGE;
-
--- Option to drop and recreate with new entries (commented out for safety)
-/*
-DROP TABLE DWH.CONTROL_TABLE_STAGE;
-
-WITH cte AS (
-    SELECT * FROM sandbox.temp_control_table_st_{table_suffix}
-    UNION ALL
-    SELECT * FROM sandbox.CONTROL_TABLE_STAGE_backup_{table_suffix} 
-    WHERE job_name+'|'+source_system+'|'+src_schema_name+'|'+src_table_name+'|'+tgt_schema_name+'|'+tgt_table_name 
-          NOT IN (SELECT job_name+'|'+source_system+'|'+src_schema_name+'|'+src_table_name+'|'+tgt_schema_name+'|'+tgt_table_name 
-                  FROM sandbox.temp_control_table_st_{table_suffix})
-)
-SELECT * INTO DWH.CONTROL_TABLE_STAGE FROM cte;
-*/
-"""
-        
-        cleanup_hs_sql = f"""-- Add the HS job definition to DWH.CONTROL_TABLE_HS
--- Backup control table first
-SELECT * INTO sandbox.CONTROL_TABLE_HS_backup_{table_suffix} FROM DWH.CONTROL_TABLE_HS;
-
--- Option to drop and recreate with new entries (commented out for safety)
-/*
-DROP TABLE DWH.CONTROL_TABLE_HS;
-
-WITH cte AS (
-    SELECT * FROM sandbox.temp_control_table_hs_{table_suffix}
-    UNION ALL
-    SELECT * FROM sandbox.CONTROL_TABLE_HS_backup_{table_suffix} 
-    WHERE job_name+'|'+src_schema_name+'|'+src_table_name+'|'+tgt_schema_name+'|'+tgt_table_name 
-          NOT IN (SELECT job_name+'|'+src_schema_name+'|'+src_table_name+'|'+tgt_schema_name+'|'+tgt_table_name 
-                  FROM sandbox.temp_control_table_hs_{table_suffix})
-)
-SELECT * INTO DWH.CONTROL_TABLE_HS FROM cte;
-*/
-"""
-        
-        cleanup_temp_sql = f"""-- Drop the temporary tables
-/*
-DROP TABLE sandbox.temp_control_table_hs_{table_suffix};
-DROP TABLE sandbox.temp_control_table_st_{table_suffix};
-DROP TABLE sandbox.temp_control_table_job_{table_suffix};
-DROP TABLE sandbox.CONTROL_TABLE_HS_backup_{table_suffix};
-DROP TABLE sandbox.CONTROL_TABLE_STAGE_backup_{table_suffix};
-*/
-"""
-        
-        tab6_sql = cleanup_stage_sql + "\n" + cleanup_hs_sql + "\n" + cleanup_temp_sql
-        st.code(tab6_sql)
-        
-    # Tab 7: Dimension and Helper Tables
-    with tab7:
-        st.subheader("Step 7: Create Dimension and Helper Tables")
-        
-        # Helper Table Creation
-        if create_helper_table and business_key_column:
-            # Extract the table name without prefix for helper table naming
-            base_table_name = src_table_name
-            if "_" in src_table_name:
-                base_table_name = src_table_name.split("_", 1)[1] if src_table_name.count("_") > 0 else src_table_name
-            
-            helper_table_name = f"HLP_BK_{base_table_name}"
-            identity_column_name = f"BK_{base_table_name}"
-            
-            helper_table_sql = f"""SET ANSI_NULLS ON
-GO
-
-SET QUOTED_IDENTIFIER ON
-GO
-
-CREATE TABLE [{helper_schema}].[{helper_table_name}](
-    [{identity_column_name}] [int] IDENTITY(1,1) NOT NULL,
-    [{business_key_column}] [bigint] NOT NULL,
-PRIMARY KEY CLUSTERED 
-(
-    [{identity_column_name}] ASC
-)WITH (STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
-) ON [PRIMARY]
-GO
-"""
-            st.code(helper_table_sql)
-        else:
-            st.info("Helper table creation was not selected. Check the 'Create helper table' option in the Dimension and Helper Tables section to generate the helper table SQL.")
-        
-        # Main Table Creation
-        if create_main_table and not skip_main_table:
-            # Extract the base table name without prefix for main table naming
-            base_table_name = src_table_name
-            if "_" in src_table_name:
-                base_table_name = src_table_name.split("_", 1)[1] if src_table_name.count("_") > 0 else src_table_name
-            
-            # Prepare table name, with user-specified prefix if provided
-            if main_table_prefix:
-                main_table_name = f"{main_table_prefix}{base_table_name}"
-            else:
-                main_table_name = f"DIM_{base_table_name}"
-            
-            # Primary key and business key column names
-            pk_column_name = f"PK_{main_table_name}"
-            bk_column_name = f"BK_{base_table_name}"
-            
-            # Process the user's column definitions
-            column_defs = []
-            for line in main_table_columns.strip().split('\n'):
-                if line.strip():
-                    column_defs.append(f"\t{line.strip()}")
-            
-            # Generate main table SQL
-            main_table_sql = f"""SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-CREATE TABLE [{main_table_schema}].[{main_table_name}](
-\t[{pk_column_name}] [int] IDENTITY(1,1) NOT NULL,
-\t[{bk_column_name}] [int] NULL,
-{chr(10).join(column_defs)},
-\t[TC_CURRENT_FLAG] [varchar](1) NULL,
-\t[TC_VALID_FROM_DATE] [datetime2](0) NULL,
-\t[TC_VALID_TO_DATE] [datetime2](0) NULL,
-\t[TC_CHECKSUM_SCD] [varchar](32) NULL,
-\t[TC_CHECKSUM_BUSKEY] [varchar](32) NULL,
-\t[TC_DELETED_FLAG] [varchar](1) NULL,
-\t[TC_DELETED_DATETIME] [datetime2](0) NULL,
-\t[TC_SOURCE_SYSTEM] [varchar](10) NULL,
-\t[TC_UPDATED_DATE] [datetime2](0) NULL,
-\t[TC_ROW_ID] [int] NULL,
-PRIMARY KEY CLUSTERED 
-(
-\t[{pk_column_name}] ASC
-)WITH (STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
-) ON [PRIMARY]
-GO
-"""
-            st.code(main_table_sql)
-        else:
-            if skip_main_table:
-                st.info("Main table creation skipped as per user selection.")
-            else:
-                st.info("Main table creation was not selected. Check the 'Create main DIM table' option to generate the main table SQL.")
-    
-    # Tab 8: ADF Pipeline JSON
-    with tab8:
-        st.subheader("Step 8: ADF Pipeline JSON")
+        st.subheader("Step 6: ADF Pipeline JSON")
         
         # Generate the ADF pipeline JSON for both initial and daily loads
         adf_pipeline_name_initial = f"pl_StageAndHistoricStageInitialLoad_{src_table_name}"
@@ -829,6 +670,100 @@ GO
         
         The pipelines will use the temporary control tables created in the previous steps.
         """)
+        
+        st.markdown("""
+        In the next step, we will create the dimension and helper tables that will store the final data.
+        """)
+    
+    # Tab 7: Dimension and Helper Tables
+    with tab7:
+        st.subheader("Step 7: Create Dimension and Helper Tables")
+        
+        # Helper Table Creation
+        if create_helper_table and business_key_column:
+            # Extract the table name without prefix for helper table naming
+            base_table_name = src_table_name
+            if "_" in src_table_name:
+                base_table_name = src_table_name.split("_", 1)[1] if src_table_name.count("_") > 0 else src_table_name
+            
+            helper_table_name = f"HLP_BK_{base_table_name}"
+            identity_column_name = f"BK_{base_table_name}"
+            
+            helper_table_sql = f"""SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [{helper_schema}].[{helper_table_name}](
+    [{identity_column_name}] [int] IDENTITY(1,1) NOT NULL,
+    [{business_key_column}] [bigint] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+    [{identity_column_name}] ASC
+)WITH (STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+"""
+            st.code(helper_table_sql)
+        else:
+            st.info("Helper table creation was not selected. Check the 'Create helper table' option in the Dimension and Helper Tables section to generate the helper table SQL.")
+    
+        # Main Table Creation
+        if create_main_table and not skip_main_table:
+            # Extract the base table name without prefix for main table naming
+            base_table_name = src_table_name
+            if "_" in src_table_name:
+                base_table_name = src_table_name.split("_", 1)[1] if src_table_name.count("_") > 0 else src_table_name
+            
+            # Prepare table name, with user-specified prefix if provided
+            if main_table_prefix:
+                main_table_name = f"{main_table_prefix}{base_table_name}"
+            else:
+                main_table_name = f"DIM_{base_table_name}"
+            
+            # Primary key and business key column names
+            pk_column_name = f"PK_{main_table_name}"
+            bk_column_name = f"BK_{base_table_name}"
+            
+            # Process the user's column definitions
+            column_defs = []
+            for line in main_table_columns.strip().split('\n'):
+                if line.strip():
+                    column_defs.append(f"\t{line.strip()}")
+            
+            # Generate main table SQL
+            main_table_sql = f"""SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [{main_table_schema}].[{main_table_name}](
+\t[{pk_column_name}] [int] IDENTITY(1,1) NOT NULL,
+\t[{bk_column_name}] [int] NULL,
+{chr(10).join(column_defs)},
+\t[TC_CURRENT_FLAG] [varchar](1) NULL,
+\t[TC_VALID_FROM_DATE] [datetime2](0) NULL,
+\t[TC_VALID_TO_DATE] [datetime2](0) NULL,
+\t[TC_CHECKSUM_SCD] [varchar](32) NULL,
+\t[TC_CHECKSUM_BUSKEY] [varchar](32) NULL,
+\t[TC_DELETED_FLAG] [varchar](1) NULL,
+\t[TC_DELETED_DATETIME] [datetime2](0) NULL,
+\t[TC_SOURCE_SYSTEM] [varchar](10) NULL,
+\t[TC_UPDATED_DATE] [datetime2](0) NULL,
+\t[TC_ROW_ID] [int] NULL,
+PRIMARY KEY CLUSTERED 
+(
+\t[{pk_column_name}] ASC
+)WITH (STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+"""
+            st.code(main_table_sql)
+        else:
+            if skip_main_table:
+                st.info("Main table creation skipped as per user selection.")
+            else:
+                st.info("Main table creation was not selected. Check the 'Create main DIM table' option to generate the main table SQL.")
     
     # Prepare complete SQL script for download
     # Add the helper table and main table SQL to the complete script if they were selected
@@ -881,9 +816,9 @@ GO
 {tab5_sql}
 
 ---------------------------------------------------------
--- STEP 6: CLEANUP - ADD TO PRODUCTION CONTROL TABLES
+-- STEP 6: ADF PIPELINE JSON
 ---------------------------------------------------------
-{tab6_sql}{helper_table_section}{main_table_section}
+{helper_table_section}{main_table_section}
 -- End of script
 """
     
