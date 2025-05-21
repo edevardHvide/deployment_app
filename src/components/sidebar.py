@@ -10,7 +10,27 @@ from src.config.constants import (
 
 def render_import_export_section():
     """Render the import parameters section in the sidebar"""
-    st.subheader("Import Parameters")
+    st.subheader("Import/Export Parameters")
+    
+    # New Export for Deployers button
+    if st.button("Export for Deployers", help="Create a configuration file for deployers"):
+        params = get_current_params()
+        if 'src_table_name' in params and params['src_table_name']:
+            params_json = export_parameters(params)
+            st.download_button(
+                label=f"Download Configuration",
+                data=params_json,
+                file_name=f"deploy_{params['src_table_name']}_{datetime.now().strftime('%Y%m%d')}.json",
+                mime="application/json",
+                key="download_params_deployer",
+                help="Download configuration file for deployers"
+            )
+            st.info("Download this configuration file and provide it to the deployment team.")
+        else:
+            st.warning("Please fill in the source table name first.")
+    
+    st.markdown("---")
+    
     uploaded_file = st.file_uploader("Upload Parameters File", type=['json'])
     if uploaded_file is not None:
         params_str = uploaded_file.getvalue().decode()
@@ -26,6 +46,12 @@ def render_import_export_section():
                     st.success("Parameters applied successfully!")
         except Exception as e:
             st.error(f"Error importing parameters: {str(e)}")
+            
+    # Allow developers to switch roles
+    st.markdown("---")
+    if st.button("Switch to Deployer View"):
+        st.session_state.user_role = "deployer"
+        st.rerun()
 
 def render_source_table_section():
     """Render the source table configuration section"""
@@ -302,28 +328,36 @@ def render_advanced_options():
             help="Number of partitions for SCD2 checks"
         )
         
-        # Source Column for Valid Dates
-        use_source_column_for_valid_dates = st.checkbox(
-            "Use Source Column for Valid Dates", 
-            st.session_state.get("use_source_column_for_valid_dates", DEFAULT_VALUES["use_source_column_for_valid_dates"])
-        )
-        
+        # Only show source column options when SCD2 from CT is selected
+        use_source_column_for_valid_dates = False
         source_column_for_valid_from_date = ""
-        if use_source_column_for_valid_dates:
-            source_column_for_valid_from_date = st.text_input(
-                "Source Column for Valid From Date", 
-                st.session_state.get("source_column_for_valid_from_date", DEFAULT_VALUES["source_column_for_valid_from_date"]), 
-                help="Source column used to determine valid from date"
-            )
-        
-        # Source Column for Sorting
         source_column_for_sorting = ""
+        
         if st.session_state.get("scd_type") == "SCD2 from CT":
+            # Source Column for Valid Dates
+            use_source_column_for_valid_dates = st.checkbox(
+                "Use Source Column for Valid Dates", 
+                st.session_state.get("use_source_column_for_valid_dates", DEFAULT_VALUES["use_source_column_for_valid_dates"])
+            )
+            
+            if use_source_column_for_valid_dates:
+                source_column_for_valid_from_date = st.text_input(
+                    "Source Column for Valid From Date", 
+                    st.session_state.get("source_column_for_valid_from_date", DEFAULT_VALUES["source_column_for_valid_from_date"]), 
+                    help="Source column used to determine valid from date"
+                )
+            
+            # Source Column for Sorting
             source_column_for_sorting = st.text_input(
                 "Source Column for Sorting", 
                 st.session_state.get("source_column_for_sorting", DEFAULT_VALUES["source_column_for_sorting"]), 
                 help="Column for sorting incoming changes"
             )
+        else:
+            # Set these values in session state to ensure they're properly set to defaults when not SCD2 from CT
+            st.session_state["use_source_column_for_valid_dates"] = False
+            st.session_state["source_column_for_valid_from_date"] = ""
+            st.session_state["source_column_for_sorting"] = ""
         
         return (prescript, postscript, partitions, use_source_column_for_valid_dates,
                 source_column_for_valid_from_date, source_column_for_sorting)
