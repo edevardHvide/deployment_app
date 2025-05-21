@@ -1,81 +1,102 @@
-# Data Warehouse Table Deployment Helper
+# Data Warehouse Deployment App
 
-A Streamlit application that automates the process of deploying tables in a data warehouse by generating the necessary SQL scripts.
+A Streamlit application for generating SQL deployment scripts and ADF pipeline configurations for data warehouse tables.
+
+## Overview
+
+This application helps automate the process of deploying tables to a data warehouse by generating:
+- SQL scripts for control table configurations
+- SQL scripts for table creation
+- Azure Data Factory (ADF) pipeline JSON configurations
+
+## Project Structure
+
+```
+deployment_app/
+├── app.py                 # Main application file
+├── src/
+│   ├── components/        # UI components
+│   │   ├── sidebar.py     # Sidebar UI components
+│   │   └── main_content.py # Main content UI components
+│   ├── utils/            # Utility functions
+│   │   ├── parameters.py  # Parameter handling functions
+│   │   ├── sql_generator.py # SQL generation functions
+│   │   └── adf_generator.py # ADF pipeline generation functions
+│   └── config/           # Configuration
+│       └── constants.py   # Constants and default values
+└── README.md             # This file
+```
 
 ## Features
 
-- Generates SQL code for all deployment steps
-- Organizes the deployment process into logical tabs
-- Customizable table properties and configuration
-- Options to skip steps for tables that already exist
-- User identification with initials in table names
-- Dated timestamps in table names for tracking
-- Download complete SQL script as a single executable file
+- **Parameter Management**
+  - Export current parameters to JSON
+  - Import parameters from JSON file
+  - Save and load configurations
 
-## Installation
+- **Table Configuration**
+  - Source table configuration
+  - Target table configuration
+  - Key columns configuration
+  - Incremental load settings
+  - SCD (Slowly Changing Dimension) configuration
+  - Delete handling configuration
 
-1. Clone this repository
-2. Install the requirements:
+- **SQL Generation**
+  - Control table backup scripts
+  - ST (Stage) control table updates
+  - HS (Historic Stage) control table updates
+  - Job control table updates
+  - HS table creation scripts
+  - Dimension and helper table creation scripts
+
+- **ADF Pipeline Generation**
+  - Initial load pipeline configuration
+  - Daily load pipeline configuration
+  - Download pipeline JSON files
+
+## Setup
+
+1. Install the required dependencies:
+```bash
+pip install streamlit pandas
 ```
-pip install -r requirements.txt
+
+2. Run the application:
+```bash
+streamlit run app.py
 ```
 
 ## Usage
 
-1. Run the Streamlit app:
-```
-streamlit run app.py
-```
+1. **Configure Parameters**
+   - Enter your initials
+   - Configure source and target table details
+   - Set up key columns and incremental load settings
+   - Configure SCD and delete handling options
 
-2. Fill in the required table information in the sidebar:
-   - Your initials for table name identification
-   - Source table information
-   - Business key
-   - SCD2 columns for HS table
-   - Delete configuration
+2. **Generate Scripts**
+   - Click "Generate SQL Script" to create all necessary scripts
+   - Review the generated scripts in the tabs
+   - Download individual scripts or the complete SQL script
 
-3. Click the "Generate SQL Script" button in the sidebar to create deployment scripts
+3. **ADF Pipeline Setup**
+   - Review the generated ADF pipeline JSON
+   - Download the pipeline configurations
+   - Follow the instructions for pasting into ADF
 
-4. Navigate through the tabs to see SQL for each step:
-   - Control Tables Backup
-   - ST Control Table configuration
-   - HS Control Table configuration
-   - Job Control Table updates
-   - HS Table creation
-   - Cleanup steps
+## Parameter Export/Import
 
-5. Use the "Skip Options" checkboxes in the sidebar if certain tables already exist
-
-6. Download the complete SQL script using the download button at the bottom of the page
-
-## Deployment Process
-
-The app follows a standardized deployment process:
-
-1. Creates temporary tables from existing control tables
-2. Updates configuration for stage tables (ST)
-3. Updates configuration for historic stage tables (HS)
-4. Updates job control settings
-5. Creates the HS table with technical columns
-6. Adds configurations to production control tables and performs cleanup
-
-## Download Feature
-
-The app provides a convenient way to download the complete SQL script as a single file:
-- All steps are combined into one ready-to-execute SQL file
-- The file is named with the table name, user initials, and timestamp (e.g., `deploy_TABLENAME_initials_20240515.sql`)
-- Comments and section headers are added for readability
-- Skip options are respected in the downloaded file
-
-## Table Naming Convention
-
-The app uses a specific naming convention for tables:
-- Temporary tables are named with the pattern: `temp_control_table_st_initials_YYYYMMDD`
-- This ensures tables are identifiable by both creator and creation date
-- Example: `temp_control_table_st_skg_20240515` for tables created by user "skg" on May 15, 2024
+- Use the "Export Parameters" button to save your current configuration
+- Use the "Import Parameters" button to load a previously saved configuration
+- Parameters are saved in JSON format
 
 ## Notes
 
-- All dangerous cleanup commands (DROP, DELETE) are commented out for safety
-- All SQL is displayed for review before execution
-- The app doesn't execute SQL directly; it generates scripts for review and manual execution 
+- The application generates temporary control tables in the `sandbox` schema
+- ADF pipelines use these temporary control tables for configuration
+- After successful initial load, update the control tables to use daily load job names
+
+## Contributing
+
+Feel free to submit issues and enhancement requests! 
