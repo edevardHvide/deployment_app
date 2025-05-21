@@ -81,7 +81,6 @@ def render_hs_table_tab():
     tab5_sql = generate_hs_table_sql(
         st.session_state.tgt_schema_name_hs,
         st.session_state.tgt_table_name_hs,
-        st.session_state.skip_hs_table,
         st.session_state.tgt_schema_name_st,
         st.session_state.tgt_table_name_st
     )
@@ -185,20 +184,16 @@ def render_dimension_helper_tab():
     # Main Table Creation
     main_table_sql = generate_main_table_sql(
         st.session_state.create_main_table,
-        st.session_state.skip_main_table,
         st.session_state.main_table_schema,
-        st.session_state.main_table_prefix,
         st.session_state.main_table_columns,
-        st.session_state.src_table_name
+        st.session_state.src_table_name,
+        st.session_state.main_table_name
     )
     
     if main_table_sql:
         st.code(main_table_sql)
     else:
-        if st.session_state.skip_main_table:
-            st.info("Main table creation skipped as per user selection.")
-        else:
-            st.info("Main table creation was not selected. Check the 'Create main DIM table' option to generate the main table SQL.")
+        st.info("Main table creation was not selected. Check the 'Create main DIM table' option to generate the main table SQL.")
 
 def render_main_content():
     """Render the main content area with all tabs"""
@@ -304,7 +299,6 @@ def render_main_content():
 {generate_hs_table_sql(
     st.session_state.tgt_schema_name_hs,
     st.session_state.tgt_table_name_hs,
-    st.session_state.skip_hs_table,
     st.session_state.tgt_schema_name_st,
     st.session_state.tgt_table_name_st
 )}
@@ -321,11 +315,10 @@ def render_main_content():
 
 {generate_main_table_sql(
     st.session_state.create_main_table,
-    st.session_state.skip_main_table,
     st.session_state.main_table_schema,
-    st.session_state.main_table_prefix,
     st.session_state.main_table_columns,
-    st.session_state.src_table_name
+    st.session_state.src_table_name,
+    st.session_state.main_table_name
 ) or ""}
 -- End of script
 """
@@ -381,7 +374,7 @@ def render_main_content():
                 "prescript", "postscript", "partitions", 
                 "use_source_column_for_valid_dates", "source_column_for_valid_from_date", 
                 "source_column_for_sorting",
-                "create_main_table", "main_table_schema", "main_table_prefix", 
+                "create_main_table", "main_table_schema", 
                 "main_table_columns", "skip_st_table", "skip_hs_table", "skip_main_table"
             ]:
                 # Include parameter if it exists in session state

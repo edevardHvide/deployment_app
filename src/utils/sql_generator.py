@@ -130,11 +130,8 @@ SET
 WHERE job_name IN ('HS_Full_Daily','ST_Full_Daily','HS_Full_Daily_Control','ST_Full_Initial');
 """
 
-def generate_hs_table_sql(tgt_schema_name_hs, tgt_table_name_hs, skip_hs_table, tgt_schema_name_st=None, tgt_table_name_st=None):
+def generate_hs_table_sql(tgt_schema_name_hs, tgt_table_name_hs, tgt_schema_name_st=None, tgt_table_name_st=None):
     """Generate SQL for HS table creation"""
-    if skip_hs_table:
-        return f"-- HS Table creation skipped as per user selection"
-    
     if not tgt_schema_name_st or not tgt_table_name_st:
         return f"""-- Error: Source table information is missing.
 -- Please provide the ST schema and table name to create the HS table correctly."""
@@ -186,17 +183,22 @@ PRIMARY KEY CLUSTERED
 GO
 """
 
-def generate_main_table_sql(create_main_table, skip_main_table, main_table_schema,
-                          main_table_prefix, main_table_columns, src_table_name):
+def generate_main_table_sql(create_main_table, main_table_schema,
+                          main_table_columns, src_table_name, main_table_name=None):
     """Generate SQL for main table creation"""
-    if not create_main_table or skip_main_table:
+    if not create_main_table:
         return None
     
-    base_table_name = src_table_name
-    if "_" in src_table_name:
-        base_table_name = src_table_name.split("_", 1)[1] if src_table_name.count("_") > 0 else src_table_name
+    # If main_table_name is not provided, derive it from src_table_name (for backward compatibility)
+    if not main_table_name:
+        base_table_name = src_table_name
+        if "_" in src_table_name:
+            base_table_name = src_table_name.split("_", 1)[1] if src_table_name.count("_") > 0 else src_table_name
+        
+        main_table_name = f"DIM_{base_table_name}"
     
-    main_table_name = f"{main_table_prefix}{base_table_name}" if main_table_prefix else f"DIM_{base_table_name}"
+    # Derive column names based on the table name
+    base_table_name = main_table_name.replace("DIM_", "")
     pk_column_name = f"PK_{main_table_name}"
     bk_column_name = f"BK_{base_table_name}"
     

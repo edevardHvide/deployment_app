@@ -193,16 +193,28 @@ def render_dimension_helper_section():
     )
     
     main_table_schema = ""
-    main_table_prefix = ""
+    main_table_name = ""
     main_table_columns = ""
     if create_main_table:
         main_table_schema = st.text_input(
             "Main Table Schema", 
             st.session_state.get("main_table_schema", DEFAULT_VALUES["main_table_schema"])
         )
-        main_table_prefix = st.text_input(
-            "Main Table Prefix", 
-            st.session_state.get("main_table_prefix", DEFAULT_VALUES["main_table_prefix"])
+        
+        # Default value for main_table_name if not already set
+        default_main_table_name = ""
+        if st.session_state.get("src_table_name") and not st.session_state.get("main_table_name"):
+            base_table_name = st.session_state.get("src_table_name")
+            if "_" in base_table_name:
+                base_table_name = base_table_name.split("_", 1)[1] if base_table_name.count("_") > 0 else base_table_name
+            default_main_table_name = f"DIM_{base_table_name}"
+        else:
+            default_main_table_name = st.session_state.get("main_table_name", "")
+        
+        main_table_name = st.text_input(
+            "Main Table Name",
+            value=default_main_table_name,
+            help="Name of the main dimension table (e.g., DIM_Customer)"
         )
         
         # Sample columns for the main table
@@ -235,7 +247,7 @@ RECORD_VERSION int NULL,
             value=st.session_state.get("business_key_column", "")
         )
     
-    return (create_main_table, main_table_schema, main_table_prefix, main_table_columns,
+    return (create_main_table, main_table_schema, main_table_name, main_table_columns,
             create_helper_table, helper_schema, business_key_column)
 
 def render_delete_section():
@@ -316,24 +328,6 @@ def render_advanced_options():
         return (prescript, postscript, partitions, use_source_column_for_valid_dates,
                 source_column_for_valid_from_date, source_column_for_sorting)
 
-def render_skip_options():
-    """Render the skip options section"""
-    st.subheader("Skip Options")
-    skip_st_table = st.checkbox(
-        "ST Table Already Exists", 
-        st.session_state.get("skip_st_table", False)
-    )
-    skip_hs_table = st.checkbox(
-        "HS Table Already Exists", 
-        st.session_state.get("skip_hs_table", False)
-    )
-    skip_main_table = st.checkbox(
-        "Main Table Already Exists", 
-        st.session_state.get("skip_main_table", False)
-    )
-    
-    return skip_st_table, skip_hs_table, skip_main_table
-
 def render_sidebar():
     """Render the complete sidebar"""
     # Render import parameters section first
@@ -353,10 +347,9 @@ def render_sidebar():
     business_key, primary_key = render_key_columns_section()
     incremental_filter_st, incremental_filter_hs, incremental_filter_timezone = render_incremental_load_section()
     scd_type, scd2_columns_option, scd2_columns = render_scd_section()
-    create_main_table, main_table_schema, main_table_prefix, main_table_columns, create_helper_table, helper_schema, business_key_column = render_dimension_helper_section()
     delete_type, src_delete_column, src_delete_value = render_delete_section()
     prescript, postscript, partitions, use_source_column_for_valid_dates, source_column_for_valid_from_date, source_column_for_sorting = render_advanced_options()
-    skip_st_table, skip_hs_table, skip_main_table = render_skip_options()
+    create_main_table, main_table_schema, main_table_name, main_table_columns, create_helper_table, helper_schema, business_key_column = render_dimension_helper_section()
     
     # Store all values in session state
     st.session_state.update({
@@ -379,7 +372,7 @@ def render_sidebar():
         "scd2_columns": scd2_columns,
         "create_main_table": create_main_table,
         "main_table_schema": main_table_schema,
-        "main_table_prefix": main_table_prefix,
+        "main_table_name": main_table_name,
         "main_table_columns": main_table_columns,
         "create_helper_table": create_helper_table,
         "helper_schema": helper_schema,
@@ -393,9 +386,9 @@ def render_sidebar():
         "use_source_column_for_valid_dates": use_source_column_for_valid_dates,
         "source_column_for_valid_from_date": source_column_for_valid_from_date,
         "source_column_for_sorting": source_column_for_sorting,
-        "skip_st_table": skip_st_table,
-        "skip_hs_table": skip_hs_table,
-        "skip_main_table": skip_main_table
+        "skip_st_table": False,
+        "skip_hs_table": False,
+        "skip_main_table": False
     })
     
     # Generate SQL button in sidebar

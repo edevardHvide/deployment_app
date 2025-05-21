@@ -30,7 +30,7 @@ DEFAULT_VALUES = {
     "source_column_for_valid_from_date": "header__timestamp",
     "source_column_for_sorting": "header__change_seq",
     "main_table_schema": "DIM",
-    "main_table_prefix": "DIM_"
+    "main_table_name": ""
 }
 
 # SCD Type Options
