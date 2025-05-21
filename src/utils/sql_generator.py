@@ -85,8 +85,14 @@ def generate_hs_control_table_sql(table_suffix, tgt_schema_name_st, tgt_table_na
     """Generate SQL for HS control table updates"""
     prescript_sql = "''" if not prescript else f"'{prescript}'"
     postscript_sql = "''" if not postscript else f"'{postscript}'"
-    use_source_column_value = 1 if use_source_column_for_valid_dates else 0
-    source_column_sql = f"'{source_column_for_valid_from_date}'" if use_source_column_for_valid_dates else "NULL"
+    
+    # Only use these values when scd_type is "SCD2 from CT"
+    if scd_type == "SCD2 from CT":
+        use_source_column_value = 1 if use_source_column_for_valid_dates else 0
+        source_column_sql = f"'{source_column_for_valid_from_date}'" if use_source_column_for_valid_dates else "NULL"
+    else:
+        use_source_column_value = 0
+        source_column_sql = "NULL"
     
     sorting_column_clause = ""
     if scd_type == "SCD2 from CT" and source_column_for_sorting:
