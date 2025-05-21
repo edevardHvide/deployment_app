@@ -982,4 +982,4 @@ else:
 
 # Footer
 st.markdown("---")
-st.caption("DWH Table Deployment Helper - Streamlit App") 
+st.caption("DWH Table Deployment Helper - A Streamlit App by Edevard Hvide") 
