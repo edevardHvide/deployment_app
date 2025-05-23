@@ -5,6 +5,7 @@ SOURCE_SYSTEM_OPTIONS = [
     "INS_temporal",
     "TIA",
     "Profisee",
+    "Profisee_dev",
     "Replicate_CDC_AllTransactions",
     "Replicate_CDC_AllTransactions_fromArchive"
 ]

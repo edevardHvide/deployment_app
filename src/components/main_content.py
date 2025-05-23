@@ -98,13 +98,19 @@ def render_adf_pipeline_tab():
     # Generate the ADF pipeline JSON for both initial and daily loads
     adf_json_initial = generate_adf_pipeline_json(st.session_state.src_table_name, st.session_state.table_suffix, True)
     adf_json_daily = generate_adf_pipeline_json(st.session_state.src_table_name, st.session_state.table_suffix, False)
+    adf_json_invalid_hs = generate_adf_pipeline_json(st.session_state.src_table_name, st.session_state.table_suffix, True, True)
     
     # Convert the Python dictionaries to formatted JSON strings
     adf_json_str_initial = json.dumps(adf_json_initial, indent=4)
     adf_json_str_daily = json.dumps(adf_json_daily, indent=4)
+    adf_json_str_invalid_hs = json.dumps(adf_json_invalid_hs, indent=4)
     
-    # Create tabs for initial and daily load JSONs
-    initial_tab, daily_tab = st.tabs(["Initial Load Pipeline", "Daily Load Pipeline"])
+    # Create tabs for initial, daily, and invalid HS load JSONs
+    initial_tab, invalid_hs_tab, daily_tab = st.tabs([
+        "Initial Load Pipeline", 
+        "Invalid HS Pipeline (Stage-only)", 
+        "Daily Load Pipeline"
+    ])
     
     with initial_tab:
         st.markdown("### Initial Load Pipeline")
@@ -115,6 +121,30 @@ def render_adf_pipeline_tab():
             file_name=f"{adf_json_initial['name']}.json",
             mime="application/json",
             key="download_adf_json_initial",
+        )
+    
+    with invalid_hs_tab:
+        st.markdown("### Invalid HS Pipeline (Stage-only)")
+        st.markdown("""
+        #### Purpose
+        This pipeline intentionally uses an invalid HS job name to run only the Stage part of the job. It will fail at the HS stage, which is expected.
+        
+        #### Workflow
+        1. Run this pipeline first to load data into the Stage table
+        2. After this pipeline completes (and fails at the HS stage), create the HS table using the script from Step 5
+        3. Then run either:
+           - The full initial load pipeline with correct parameters, or
+           - A pipeline using the ST_Placeholder job to only run the HS part
+        
+        This approach helps prevent the "Invalid object name" error by creating the HS table before the actual HS job runs.
+        """)
+        st.code(adf_json_str_invalid_hs, language="json")
+        st.download_button(
+            label="Download Invalid HS Pipeline JSON",
+            data=adf_json_str_invalid_hs,
+            file_name=f"{adf_json_invalid_hs['name']}.json",
+            mime="application/json",
+            key="download_adf_json_invalid_hs",
         )
     
     with daily_tab:
@@ -133,25 +163,20 @@ def render_adf_pipeline_tab():
     ### Instructions for Pasting into ADF
     
     1. Open Azure Data Factory dev
-    2. For Initial Load:
-       - Navigate to the "Deployment and initial load" folder
+    2. For each pipeline:
+       - Navigate to the appropriate folder ("Deployment and initial load" or "Scheduling")
        - Create a new pipeline
-       - Rename it to match the initial load pipeline name
+       - Rename it to match the pipeline name
        - Click the "Code" button in the top right corner
        - Delete all existing code in the editor
-       - Paste the Initial Load JSON code
+       - Paste the JSON code
        - Click "Apply"
        - Save the pipeline
     
-    3. For Daily Load:
-       - Navigate to the "Scheduling" folder
-       - Create a new pipeline
-       - Rename it to match the daily load pipeline name
-       - Click the "Code" button in the top right corner
-       - Delete all existing code in the editor
-       - Paste the Daily Load JSON code
-       - Click "Apply"
-       - Save the pipeline
+    3. Recommended deployment sequence:
+       - Run the Invalid HS Pipeline first (this loads data to ST and fails at HS, which is expected)
+       - Run the HS table creation script (Step 5)
+       - Either run the Initial Load Pipeline again, or use ST_Placeholder to complete the HS part only
     
     4. After successful initial load:
        - Update the control tables to use the daily load job names
@@ -166,7 +191,7 @@ def render_adf_pipeline_tab():
 
 def render_dimension_helper_tab():
     """Render the dimension and helper tables tab"""
-    st.subheader("Step 7: Create Dimension and Helper Tables")
+    st.subheader("Step 10: Create Dimension and Helper Tables")
     
     # Helper Table Creation
     helper_table_sql = generate_helper_table_sql(
@@ -195,18 +220,85 @@ def render_dimension_helper_tab():
     else:
         st.info("Main table creation was not selected. Check the 'Create main DIM table' option to generate the main table SQL.")
 
+def render_cleanup_tab(table_suffix):
+    """Render the cleanup tab"""
+    st.subheader("Step 9: Cleanup")
+    
+    cleanup_sql = f"""-- Cleanup:
+
+-- a. Add the stage job definition to DWH.CONTROL_TABLE_STAGE
+
+/*
+select * into sandbox.CONTROL_TABLE_STAGE_backup_{table_suffix} from DWH.CONTROL_TABLE_STAGE;
+*/
+/*
+drop table DWH.CONTROL_TABLE_STAGE;
+*/
+/*
+with cte as (
+select * from sandbox.temp_control_table_st_{table_suffix}
+union all
+select * from sandbox.CONTROL_TABLE_STAGE_backup_{table_suffix} 
+where job_name+'|'+source_system+'|'+src_schema_name+'|'+src_table_name+'|'+tgt_schema_name+'|'+tgt_table_name 
+      not in (select job_name+'|'+source_system+'|'+src_schema_name+'|'+src_table_name+'|'+tgt_schema_name+'|'+tgt_table_name from sandbox.temp_control_table_st_{table_suffix})
+)
+select * into DWH.CONTROL_TABLE_STAGE from cte;
+*/
+
+-- b. Add the HS job definition to DWH.CONTROL_TABLE_HS
+
+/*
+select * into sandbox.CONTROL_TABLE_HS_backup_{table_suffix} from DWH.CONTROL_TABLE_HS;
+*/
+/*
+drop table DWH.CONTROL_TABLE_HS;
+*/
+/*
+with cte as (
+select * from sandbox.temp_control_table_hs_{table_suffix}
+union all
+select * from sandbox.CONTROL_TABLE_HS_backup_{table_suffix} 
+where job_name+'|'+src_schema_name+'|'+src_table_name+'|'+tgt_schema_name+'|'+tgt_table_name 
+      not in (select job_name+'|'+src_schema_name+'|'+src_table_name+'|'+tgt_schema_name+'|'+tgt_table_name from sandbox.temp_control_table_hs_{table_suffix})
+)
+select * into DWH.CONTROL_TABLE_HS from cte;
+*/
+
+-- c. drop the temporary tables:
+
+--drop table sandbox.temp_control_table_hs_{table_suffix};
+--drop table sandbox.temp_control_table_st_{table_suffix};
+--drop table sandbox.temp_control_table_job_{table_suffix};
+--drop table sandbox.CONTROL_TABLE_HS_backup_{table_suffix};
+--drop table sandbox.CONTROL_TABLE_STAGE_backup_{table_suffix};
+
+-- If using an existing job name, the job should now be executed as part of that job's schedule.
+"""
+    
+    st.code(cleanup_sql)
+    
+    st.markdown("""
+    **NOTE:** Uncomment the statements in order when you are ready to move the configuration to production:
+    1. First backup the existing control tables
+    2. Drop the existing tables
+    3. Create new tables with combined definitions
+    4. Drop temporary tables when everything is verified
+    """)
+
 def render_main_content():
     """Render the main content area with all tabs"""
     st.header("Generated SQL Deployment Script")
     
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
         "1. Control Tables Backup", 
         "2. ST Control Table", 
         "3. HS Control Table", 
         "4. Job Control Table",
         "5. Create HS Table",
         "6. ADF Pipeline JSON",
-        "7. Dimension and Helper Tables"
+        "7. Verify Deployment",
+        "8. Cleanup",
+        "9. Dimension and Helper Tables"
     ])
     
     if st.session_state.sql_generated:
@@ -231,6 +323,28 @@ def render_main_content():
             render_adf_pipeline_tab()
         
         with tab7:
+            st.subheader("Step 8: Verify Deployment")
+            st.markdown(f"""
+            Run the following queries to verify your deployment:
+            
+            ```sql
+            -- Verify ST table has data
+            SELECT TOP 10 * FROM {st.session_state.tgt_schema_name_st}.{st.session_state.tgt_table_name_st};
+            
+            -- Verify HS table structure and data
+            SELECT TOP 10 * FROM {st.session_state.tgt_schema_name_hs}.{st.session_state.tgt_table_name_hs};
+            
+            -- Check technical columns in HS table
+            SELECT TC_CURRENT_FLAG, TC_VALID_FROM_DATE, TC_VALID_TO_DATE, TC_CHECKSUM_BUSKEY, TC_CHECKSUM_SCD 
+            FROM {st.session_state.tgt_schema_name_hs}.{st.session_state.tgt_table_name_hs} 
+            WHERE TC_CURRENT_FLAG = 'Y';
+            ```
+            """)
+        
+        with tab8:
+            render_cleanup_tab(table_suffix)
+        
+        with tab9:
             render_dimension_helper_tab()
         
         # Prepare complete SQL script for download
@@ -304,7 +418,72 @@ def render_main_content():
 )}
 
 ---------------------------------------------------------
--- STEP 6: ADF PIPELINE JSON
+-- STEP 8: VERIFY DEPLOYMENT
+---------------------------------------------------------
+-- Verify ST table has data
+-- SELECT TOP 10 * FROM {st.session_state.tgt_schema_name_st}.{st.session_state.tgt_table_name_st};
+
+-- Verify HS table structure and data
+-- SELECT TOP 10 * FROM {st.session_state.tgt_schema_name_hs}.{st.session_state.tgt_table_name_hs};
+
+-- Check technical columns in HS table
+-- SELECT TC_CURRENT_FLAG, TC_VALID_FROM_DATE, TC_VALID_TO_DATE, TC_CHECKSUM_BUSKEY, TC_CHECKSUM_SCD 
+-- FROM {st.session_state.tgt_schema_name_hs}.{st.session_state.tgt_table_name_hs} 
+-- WHERE TC_CURRENT_FLAG = 'Y';
+
+---------------------------------------------------------
+-- STEP 9: CLEANUP
+---------------------------------------------------------
+-- Cleanup:
+
+-- a. Add the stage job definition to DWH.CONTROL_TABLE_STAGE
+
+/*
+select * into sandbox.CONTROL_TABLE_STAGE_backup_{table_suffix} from DWH.CONTROL_TABLE_STAGE;
+*/
+/*
+drop table DWH.CONTROL_TABLE_STAGE;
+*/
+/*
+with cte as (
+select * from sandbox.temp_control_table_st_{table_suffix}
+union all
+select * from sandbox.CONTROL_TABLE_STAGE_backup_{table_suffix} 
+where job_name+'|'+source_system+'|'+src_schema_name+'|'+src_table_name+'|'+tgt_schema_name+'|'+tgt_table_name 
+      not in (select job_name+'|'+source_system+'|'+src_schema_name+'|'+src_table_name+'|'+tgt_schema_name+'|'+tgt_table_name from sandbox.temp_control_table_st_{table_suffix})
+)
+select * into DWH.CONTROL_TABLE_STAGE from cte;
+*/
+
+-- b. Add the HS job definition to DWH.CONTROL_TABLE_HS
+
+/*
+select * into sandbox.CONTROL_TABLE_HS_backup_{table_suffix} from DWH.CONTROL_TABLE_HS;
+*/
+/*
+drop table DWH.CONTROL_TABLE_HS;
+*/
+/*
+with cte as (
+select * from sandbox.temp_control_table_hs_{table_suffix}
+union all
+select * from sandbox.CONTROL_TABLE_HS_backup_{table_suffix} 
+where job_name+'|'+src_schema_name+'|'+src_table_name+'|'+tgt_schema_name+'|'+tgt_table_name 
+      not in (select job_name+'|'+src_schema_name+'|'+src_table_name+'|'+tgt_schema_name+'|'+tgt_table_name from sandbox.temp_control_table_hs_{table_suffix})
+)
+select * into DWH.CONTROL_TABLE_HS from cte;
+*/
+
+-- c. drop the temporary tables:
+
+--drop table sandbox.temp_control_table_hs_{table_suffix};
+--drop table sandbox.temp_control_table_st_{table_suffix};
+--drop table sandbox.temp_control_table_job_{table_suffix};
+--drop table sandbox.CONTROL_TABLE_HS_backup_{table_suffix};
+--drop table sandbox.CONTROL_TABLE_STAGE_backup_{table_suffix};
+
+---------------------------------------------------------
+-- STEP 10: CREATE HELPER AND DIMENSION TABLES
 ---------------------------------------------------------
 {generate_helper_table_sql(
     st.session_state.create_helper_table,
