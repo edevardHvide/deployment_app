@@ -226,7 +226,8 @@ def render_deployment_instructions():
                 st.session_state.get("create_helper_table", False),
                 st.session_state.get("helper_schema", ""),
                 st.session_state.get("business_key_column", ""),
-                st.session_state.src_table_name
+                st.session_state.src_table_name,
+                st.session_state.get("business_key", "")
             )
             
             main_table_sql = generate_main_table_sql(

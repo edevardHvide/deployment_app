@@ -198,7 +198,8 @@ def render_dimension_helper_tab():
         st.session_state.create_helper_table,
         st.session_state.helper_schema,
         st.session_state.business_key_column,
-        st.session_state.src_table_name
+        st.session_state.src_table_name,
+        st.session_state.business_key
     )
     
     if helper_table_sql:
@@ -489,7 +490,8 @@ select * into DWH.CONTROL_TABLE_HS from cte;
     st.session_state.create_helper_table,
     st.session_state.helper_schema,
     st.session_state.business_key_column,
-    st.session_state.src_table_name
+    st.session_state.src_table_name,
+    st.session_state.business_key
 ) or ""}
 
 {generate_main_table_sql(

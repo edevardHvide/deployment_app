@@ -124,9 +124,6 @@ def generate_hs_control_table_sql(table_suffix, source_system_initial, source_sy
     # Special job name for Profisee source
     hs_job_name = "HS_Profisee_Daily" if source_system_initial and "Profisee_dev" in source_system_initial else "HS_Full_Daily"
     
-    # Use the same job name for WHERE clause as we're using in the SET clause for consistency
-    hs_job_name_where = hs_job_name
-    
     # Handle table names for Profisee sources
     if source_system_initial and "Profisee_dev" in source_system_initial:
         # For Profisee, use ST_PRO_[source_table_name] for source and HS_PRO_[source_table_name] for target
@@ -158,7 +155,7 @@ SET job_name = '{hs_job_name}',
     partitions = {partitions},
     use_source_column_for_valid_dates = {use_source_column_value},
     source_column_for_valid_from_date = {source_column_sql}{sorting_column_clause}
-WHERE job_name = '{hs_job_name_where}';
+;
 """
 
 def generate_job_control_sql(table_suffix, source_system_initial=None, source_system_daily=None):
@@ -216,9 +213,9 @@ BEGIN
 END
 """
 
-def generate_helper_table_sql(create_helper_table, helper_schema, business_key_column, src_table_name):
+def generate_helper_table_sql(create_helper_table, helper_schema, business_key_column, src_table_name, business_key=""):
     """Generate SQL for helper table creation"""
-    if not create_helper_table or not business_key_column:
+    if not create_helper_table:
         return None
     
     # Extract base table name and convert to uppercase for table naming
@@ -229,9 +226,16 @@ def generate_helper_table_sql(create_helper_table, helper_schema, business_key_c
     # Convert base table name to uppercase for both table and column names
     base_table_name_upper = base_table_name.upper()
     
-    # Create uppercase helper table and column names
+    # Create uppercase helper table and dimension table names
     helper_table_name = f"HLP_BK_{base_table_name_upper}"
-    identity_column_name = f"BK_{base_table_name_upper}"
+    dim_table_name = f"DIM_{base_table_name_upper}"
+    
+    # First column name is BK_DIM_TABLENAME
+    identity_column_name = f"BK_{dim_table_name}"
+    
+    # For the second column, use the business key
+    # If business_key contains multiple comma-separated keys, use the first one
+    business_key_column_name = business_key.split(",")[0].strip() if business_key else business_key_column
     
     return f"""SET ANSI_NULLS ON
 GO
@@ -239,9 +243,9 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE TABLE [{helper_schema}].[{helper_table_name}](
+CREATE TABLE [{helper_schema}].[HLP_BK_{dim_table_name}](
     [{identity_column_name}] [int] IDENTITY(1,1) NOT NULL,
-    [{business_key_column}] [bigint] NOT NULL,
+    [{business_key_column_name}] [bigint] NOT NULL,
 PRIMARY KEY CLUSTERED 
 (
     [{identity_column_name}] ASC
@@ -284,6 +288,14 @@ def generate_main_table_sql(create_main_table, main_table_schema,
         if line.strip():
             column_defs.append(f"\t{line.strip()}")
     
+    # The job control table entry name should match the DIM table name
+    job_control_entry = f"""
+-- Add the dimension table job to DWH.JOB_CONTROL
+INSERT INTO DWH.JOB_CONTROL VALUES 
+('{main_table_name}','1970-01-01 00:00:00','1970-01-01 00:00:00','SUCCESS','1970-01-01 00:00:00',0,NULL)
+GO
+"""
+    
     return f"""SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -307,7 +319,7 @@ PRIMARY KEY CLUSTERED
 \t[{pk_column_name}] ASC
 )WITH (STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
-GO
+GO{job_control_entry}
 """
 
 def generate_hs_table_quick_creation_sql(tgt_schema_name_hs, tgt_table_name_hs, tgt_schema_name_st, tgt_table_name_st=None, source_system=None, src_table_name=None):
