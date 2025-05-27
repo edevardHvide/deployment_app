@@ -235,7 +235,8 @@ def render_deployment_instructions():
                 st.session_state.get("main_table_schema", ""),
                 st.session_state.get("main_table_columns", ""),
                 st.session_state.src_table_name,
-                st.session_state.get("main_table_name", "")
+                st.session_state.get("main_table_name", ""),
+                st.session_state.get("business_key_column", "")
             )
             
             # Generate ADF pipeline JSON

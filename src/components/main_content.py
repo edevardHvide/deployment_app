@@ -213,7 +213,8 @@ def render_dimension_helper_tab():
         st.session_state.main_table_schema,
         st.session_state.main_table_columns,
         st.session_state.src_table_name,
-        st.session_state.main_table_name
+        st.session_state.main_table_name,
+        st.session_state.business_key_column
     )
     
     if main_table_sql:
@@ -499,7 +500,8 @@ select * into DWH.CONTROL_TABLE_HS from cte;
     st.session_state.main_table_schema,
     st.session_state.main_table_columns,
     st.session_state.src_table_name,
-    st.session_state.main_table_name
+    st.session_state.main_table_name,
+    st.session_state.business_key_column
 ) or ""}
 -- End of script
 """

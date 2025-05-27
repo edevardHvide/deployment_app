@@ -245,7 +245,7 @@ GO
 
 CREATE TABLE [{helper_schema}].[HLP_BK_{dim_table_name}](
     [{identity_column_name}] [int] IDENTITY(1,1) NOT NULL,
-    [{business_key_column_name}] [bigint] NOT NULL,
+    [{business_key_column_name}] [nvarchar](100) NOT NULL,
 PRIMARY KEY CLUSTERED 
 (
     [{identity_column_name}] ASC
@@ -255,7 +255,7 @@ GO
 """
 
 def generate_main_table_sql(create_main_table, main_table_schema,
-                          main_table_columns, src_table_name, main_table_name=None):
+                          main_table_columns, src_table_name, main_table_name=None, business_key_column=None):
     """Generate SQL for main table creation"""
     if not create_main_table:
         return None
@@ -281,7 +281,8 @@ def generate_main_table_sql(create_main_table, main_table_schema,
     
     # Derive column names based on the table name - all in uppercase
     pk_column_name = f"PK_{main_table_name}"
-    bk_column_name = f"BK_{base_table_name_upper}"
+    # Use the provided business_key_column or derive it from the table name
+    bk_column_name = business_key_column if business_key_column else f"BK_{base_table_name_upper}"
     
     column_defs = []
     for line in main_table_columns.strip().split('\n'):
