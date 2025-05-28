@@ -96,9 +96,33 @@ def render_adf_pipeline_tab():
     st.subheader("Step 6: ADF Pipeline JSON")
     
     # Generate the ADF pipeline JSON for both initial and daily loads
-    adf_json_initial = generate_adf_pipeline_json(st.session_state.src_table_name, st.session_state.table_suffix, True)
-    adf_json_daily = generate_adf_pipeline_json(st.session_state.src_table_name, st.session_state.table_suffix, False)
-    adf_json_invalid_hs = generate_adf_pipeline_json(st.session_state.src_table_name, st.session_state.table_suffix, True, True)
+    adf_json_initial = generate_adf_pipeline_json(
+        st.session_state.src_table_name, 
+        st.session_state.table_suffix, 
+        True, 
+        False, 
+        False, 
+        st.session_state.source_system_initial, 
+        st.session_state.source_system_daily
+    )
+    adf_json_daily = generate_adf_pipeline_json(
+        st.session_state.src_table_name, 
+        st.session_state.table_suffix, 
+        False, 
+        False, 
+        False, 
+        st.session_state.source_system_initial, 
+        st.session_state.source_system_daily
+    )
+    adf_json_invalid_hs = generate_adf_pipeline_json(
+        st.session_state.src_table_name, 
+        st.session_state.table_suffix, 
+        True, 
+        True, 
+        False, 
+        st.session_state.source_system_initial, 
+        st.session_state.source_system_daily
+    )
     
     # Convert the Python dictionaries to formatted JSON strings
     adf_json_str_initial = json.dumps(adf_json_initial, indent=4)
