@@ -126,9 +126,15 @@ def render_deployment_instructions():
     ## Deployment for: {st.session_state.src_table_name}
     
     **Configuration uploaded by:** {st.session_state.get('user_initials', 'Developer')}  
+    **Table suffix:** `{table_suffix}` *(preserved from original configuration - ensures temp tables match)*  
     **Target tables:**
     - ST table: `{st.session_state.tgt_schema_name_st}.{st.session_state.tgt_table_name_st}`
     - HS table: `{st.session_state.tgt_schema_name_hs}.{st.session_state.tgt_table_name_hs}`
+    
+    **Temp control tables that will be created:**
+    - `sandbox.temp_control_table_st_{table_suffix}`
+    - `sandbox.temp_control_table_hs_{table_suffix}`
+    - `sandbox.temp_control_table_job_{table_suffix}`
     """)
     
     # Create tabs for deployment steps

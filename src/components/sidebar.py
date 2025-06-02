@@ -16,6 +16,10 @@ def render_import_export_section():
     if st.button("Export for Deployers", help="Create a configuration file for deployers"):
         params = get_current_params()
         if 'src_table_name' in params and params['src_table_name']:
+            # Show table suffix info if available
+            if 'table_suffix' in params and params['table_suffix']:
+                st.info(f"💾 Table suffix `{params['table_suffix']}` will be preserved in the export.")
+            
             params_json = export_parameters(params)
             st.download_button(
                 label=f"Download Configuration",
@@ -432,9 +436,9 @@ def render_sidebar():
         elif not user_initials:
             st.error("Please enter your initials")
         else:
-            # Generate unique timestamp for table names
-            current_date = datetime.now().strftime("%Y%m%d")
-            st.session_state.timestamp = current_date
-            st.session_state.table_suffix = f"{user_initials}_{current_date}"
+            # Generate unique timestamp for table names - include both date and time for uniqueness
+            current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
+            st.session_state.timestamp = current_datetime
+            st.session_state.table_suffix = f"{user_initials}_{current_datetime}"
             st.session_state.sql_generated = True
             st.success("SQL Generated Successfully! Check the tabs below.") 

@@ -315,6 +315,16 @@ def render_main_content():
     """Render the main content area with all tabs"""
     st.header("Generated SQL Deployment Script")
     
+    # Show table suffix information if SQL is generated
+    if st.session_state.sql_generated:
+        table_suffix = st.session_state.table_suffix
+        # Check if this looks like a fresh generation (contains current user's initials and recent timestamp)
+        user_initials = st.session_state.get('user_initials', '').lower()
+        if user_initials and table_suffix.startswith(f"{user_initials}_"):
+            st.info(f"📋 **Table Suffix:** `{table_suffix}` - Generated for this session. This suffix will be preserved when you export parameters for deployment.")
+        else:
+            st.info(f"📋 **Table Suffix:** `{table_suffix}` - Imported from configuration. This ensures consistency with the original SQL generation.")
+    
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
         "1. Control Tables Backup", 
         "2. ST Control Table", 
@@ -555,6 +565,7 @@ select * into DWH.CONTROL_TABLE_HS from cte;
         
         with col2:
             st.subheader("Export Parameters")
+            st.info(f"💾 **Table Suffix Preservation**: The current table suffix `{table_suffix}` will be saved in the exported configuration to ensure deployment consistency.")
             
             # Create a unique file name for the parameters
             if st.session_state.src_table_name:
@@ -568,7 +579,7 @@ select * into DWH.CONTROL_TABLE_HS from cte;
             
             # Get all relevant parameters from session state
             for key in [
-                "user_initials", 
+                "user_initials", "table_suffix",
                 "source_system_initial", "source_system_daily",
                 "src_schema_name", "src_table_name", "src_table_name_ct",
                 "tgt_schema_name_st", "tgt_table_name_st", 

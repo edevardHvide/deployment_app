@@ -8,7 +8,7 @@ def export_parameters(params):
         # Extract specific parameters that we want to include
         export_params = {}
         for key in [
-            "user_initials", 
+            "user_initials", "table_suffix",
             "source_system_initial", "source_system_daily", 
             "src_schema_name", "src_table_name", 
             "tgt_schema_name_st", "tgt_table_name_st", 
@@ -44,7 +44,7 @@ def import_parameters(json_string):
         # Extract specific parameters that we want to include
         import_params = {}
         for key in [
-            "user_initials", 
+            "user_initials", "table_suffix",
             "source_system_initial", "source_system_daily", 
             "src_schema_name", "src_table_name", 
             "tgt_schema_name_st", "tgt_table_name_st", 
@@ -71,7 +71,7 @@ def get_current_params():
     # Extract specific parameters that we want to include
     current_params = {}
     for key in [
-        "user_initials", 
+        "user_initials", "table_suffix",
         "source_system_initial", "source_system_daily", 
         "src_schema_name", "src_table_name", 
         "tgt_schema_name_st", "tgt_table_name_st", 
